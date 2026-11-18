@@ -79,6 +79,11 @@ deployed server.** Nothing deploys from anywhere else.
    - `GET https://mcp.peptidex.ai/health` → `{"status":"ok", "service":
      "peptidex-reference-map", "library_version":"2026-11-18.1"}` (or the
      newer version being deployed).
+   - `GET https://mcp.peptidex.ai/demo/peptidex-walkthrough.mp4` → 200,
+     `Content-Type: video/mp4`, full 2,490,547 bytes (sha256
+     `3f24fb51…f1fbadaf7`); a `Range: bytes=1000-1999` request → 206 with
+     `Content-Range: bytes 1000-1999/2490547`. Any other `/demo/*` path
+     → 404. (v0.3.1+, see "Demo video route" below.)
    - `GET https://mcp.peptidex.ai/.well-known/openai-apps-challenge` →
      the current binding token.
    - MCP `initialize` + `tools/list` → exactly the nine read-only tools,
@@ -91,6 +96,30 @@ deployed server.** Nothing deploys from anywhere else.
 5. Run the in-ChatGPT Developer Mode set (spec 08 §9 positives/negatives,
    adapted to the map operations) before any submission step.
 6. Record the deploy in `BUILD-STATUS.md`.
+
+## Demo video route (v0.3.1)
+
+The OpenAI apps demo video is served at
+`GET /demo/peptidex-walkthrough.mp4` — the same pattern as the other
+apps' `/demo/*.mp4` URLs. The MP4 (2.4 MB) cannot be inlined into a
+Worker script, so it is committed in this repo at
+`demo/peptidex-walkthrough.mp4` and the route **streams it from the
+repo's raw GitHub URL**, passing `Range` / `If-Range` through and
+setting `Content-Type: video/mp4`, `Accept-Ranges: bytes` and
+`Cache-Control: public, max-age=31536000, immutable`. Exact path only;
+every other `/demo/*` path returns 404. This is the Worker's only
+outbound fetch and its only non-MCP route; the nine tools, `/health`
+and the challenge route are unchanged, and the dataset version does not
+move (still `2026-11-18.1`).
+
+No new bindings are required. The optional `DEMO_VIDEO_URL` env binding
+overrides the upstream URL and exists for tests only
+(`tests/test_demo_route.mjs` points it at a local file server, and can
+also run `--live` against the real raw URL) — leave it unset in
+production. To replace the video: overwrite
+`demo/peptidex-walkthrough.mp4`, commit + push, rebuild, redeploy; the
+immutable cache means a *changed* video should also change the file
+name (and the route constant) or wait out client caches.
 
 ## Rollback
 

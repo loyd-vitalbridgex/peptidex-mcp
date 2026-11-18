@@ -18,6 +18,13 @@ evidence comparisons, and dated regulatory records. Build spec v0.2
   mirror (37 tests).
 - `tests/test_worker.mjs` — tests that exercise the Worker artifact
   itself in Node (15 tests).
+- `demo/peptidex-walkthrough.mp4` — the OpenAI apps demo video. Too
+  large to inline into the Worker, so the Worker's
+  `GET /demo/peptidex-walkthrough.mp4` route streams it from this
+  repo's raw GitHub URL with Range passthrough (v0.3.1).
+- `tests/test_demo_route.mjs` — demo-route tests (8): local mode stubs
+  the upstream to a 127.0.0.1 file server via the `DEMO_VIDEO_URL` env
+  override; `--live` mode tests the real raw URL.
 - `DEPLOY.md` — deploy steps, rollback, audit, clinical seam.
 - `BUILD-STATUS.md` — what was built, versions, test results, open items.
 

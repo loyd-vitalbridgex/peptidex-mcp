@@ -24,6 +24,21 @@ FDA TB-500 evaluation added as a cited source, two document dates and
 one misattribution corrected. Dataset version **2026-11-18.1**. Full
 detail: `../openai-plugin-specs/12-peptidex-map-v0.3-changes.md`.
 
+**v0.3.1 update (2026-11-18, demo video hosting):** new Worker route
+`GET /demo/peptidex-walkthrough.mp4` so the OpenAI app demo video is
+hosted on the MCP endpoint, same pattern as the other apps. The MP4
+(2,490,547 bytes, sha256 `3f24fb51…f1fbadaf7`) is committed at
+`demo/peptidex-walkthrough.mp4`; the route streams it from the repo's
+raw GitHub URL with Range passthrough, `Content-Type: video/mp4`,
+`Accept-Ranges: bytes` and a one-year immutable cache. Exact path
+only — other `/demo/*` paths 404. No tool, `/health`, challenge-route
+or dataset change (library stays **2026-11-18.1**). New suite
+`tests/test_demo_route.mjs`: 8/8 in local mode (upstream stubbed to a
+127.0.0.1 file server via the `DEMO_VIDEO_URL` env override) and 8/8
+in `--live` mode against the real raw URL; existing suites unchanged
+at Python 37/37 and Worker 15/15. Full detail:
+`../openai-plugin-specs/13-peptidex-map-v0.3.1-changes.md`.
+
 ## What was built
 
 | File | What it is |

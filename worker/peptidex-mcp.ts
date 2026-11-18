@@ -10,8 +10,11 @@
 // One versioned, reviewed dataset (../data/library.json, inlined at build
 // time) serves all nine operations: the six reference-map operations of
 // build spec v0.2 plus the three library operations of the education app.
-// No outbound fetching at request time, no auth, no user data, no input
-// logging. Rejected input is never echoed and never stored. Every payload
+// No auth, no user data, no input logging. The MCP surface makes no
+// outbound fetch at request time; the single exception in this module is
+// the /demo route below, which streams the OpenAI apps demo video from
+// this repo (the MP4 is too large to inline into a Worker script).
+// Rejected input is never echoed and never stored. Every payload
 // ends with the spec section 7 disclaimer, verbatim.
 //
 // Validation note: unlike the Python/Deno mirrors, the advertised
@@ -596,6 +599,50 @@ const json = (body: any, status = 200) =>
 
 interface WorkerEnv {
   OPENAI_APPS_CHALLENGE_TOKEN?: string;
+  DEMO_VIDEO_URL?: string;
+}
+
+// ------------------------------------------------------------- demo video --
+// The OpenAI apps demo video is a 2.4 MB MP4 — too large to inline into
+// a Worker script — so it is committed in this repo at demo/
+// peptidex-walkthrough.mp4 and this route streams it from the repo's
+// raw URL, passing Range requests through so players can seek. This is
+// the ONLY outbound fetch the Worker makes and the only route serving
+// non-MCP content. The DEMO_VIDEO_URL env binding overrides the
+// upstream (tests point it at a local file server); production leaves
+// it unset. Exact path only — every other /demo/* path 404s.
+const DEMO_VIDEO_PATH = "/demo/peptidex-walkthrough.mp4";
+const DEMO_VIDEO_UPSTREAM =
+  "https://raw.githubusercontent.com/loyd-vitalbridgex/peptidex-mcp/main/demo/peptidex-walkthrough.mp4";
+const DEMO_VIDEO_CACHE = "public, max-age=31536000, immutable";
+
+async function serveDemoVideo(req: Request, env: WorkerEnv): Promise<Response> {
+  const upstream = (env.DEMO_VIDEO_URL ?? "").trim() || DEMO_VIDEO_UPSTREAM;
+  const fwd = new Headers();
+  const range = req.headers.get("range");
+  if (range) fwd.set("Range", range);
+  const ifRange = req.headers.get("if-range");
+  if (ifRange) fwd.set("If-Range", ifRange);
+  let up: Response;
+  try {
+    up = await fetch(upstream, { method: req.method, headers: fwd });
+  } catch {
+    return new Response("demo video temporarily unavailable",
+      { status: 502, headers: CORS });
+  }
+  if (!up.ok && up.status !== 416) {
+    return new Response("demo video temporarily unavailable",
+      { status: 502, headers: CORS });
+  }
+  const headers = new Headers(CORS);
+  headers.set("Content-Type", "video/mp4");
+  headers.set("Accept-Ranges", "bytes");
+  headers.set("Cache-Control", DEMO_VIDEO_CACHE);
+  const len = up.headers.get("content-length");
+  if (len) headers.set("Content-Length", len);
+  const crange = up.headers.get("content-range");
+  if (crange) headers.set("Content-Range", crange);
+  return new Response(up.body, { status: up.status, headers });
 }
 
 export default {
@@ -614,6 +661,13 @@ export default {
           { status: 404, headers: CORS });
       }
       return new Response(token, { headers: { ...CORS, "Content-Type": "text/plain" } });
+    }
+    if ((req.method === "GET" || req.method === "HEAD") &&
+        path === DEMO_VIDEO_PATH) {
+      return serveDemoVideo(req, env);
+    }
+    if (path.startsWith("/demo/")) {
+      return new Response("not found", { status: 404, headers: CORS });
     }
     if (req.method === "GET") {
       return json({ jsonrpc: "2.0", error: { code: -32000,
