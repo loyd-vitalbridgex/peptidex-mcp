@@ -616,13 +616,43 @@ const DEMO_VIDEO_UPSTREAM =
   "https://raw.githubusercontent.com/loyd-vitalbridgex/peptidex-mcp/main/demo/peptidex-walkthrough.mp4";
 const DEMO_VIDEO_CACHE = "public, max-age=31536000, immutable";
 
+async function upstreamLength(url        )                         {
+  try {
+    const res = await fetch(url, { method: "HEAD" });
+    if (!res.ok) return null;
+    const len = Number(res.headers.get("content-length"));
+    return Number.isFinite(len) && len > 0 ? len : null;
+  } catch {
+    return null;
+  }
+}
+
 async function serveDemoVideo(req         , env           )                    {
   const upstream = (env.DEMO_VIDEO_URL ?? "").trim() || DEMO_VIDEO_UPSTREAM;
   const fwd = new Headers();
-  const range = req.headers.get("range");
-  if (range) fwd.set("Range", range);
+  let range = req.headers.get("range");
+  if (range) {
+    // The upstream CDN serves explicit ranges (bytes=A-B, bytes=A-) but
+    // rejects suffix ranges (bytes=-N) with 501, so a suffix range is
+    // rewritten to the equivalent explicit range using a HEAD for the
+    // object length. An unparseable or multi-range header is dropped —
+    // a server may ignore Range and answer 200 with the full body.
+    const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+    if (m && m[1] === "" && m[2] !== "" && Number(m[2]) > 0) {
+      const len = await upstreamLength(upstream);
+      if (len !== null) {
+        const n = Math.min(Number(m[2]), len);
+        range = `bytes=${len - n}-${len - 1}`;
+      } else {
+        range = null;
+      }
+    } else if (!m || (m[1] === "" && m[2] === "")) {
+      range = null;
+    }
+    if (range) fwd.set("Range", range);
+  }
   const ifRange = req.headers.get("if-range");
-  if (ifRange) fwd.set("If-Range", ifRange);
+  if (ifRange && range) fwd.set("If-Range", ifRange);
   let up          ;
   try {
     up = await fetch(upstream, { method: req.method, headers: fwd });

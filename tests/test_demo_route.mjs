@@ -40,6 +40,16 @@ function startLocalUpstream() {
     if (req.url !== DEMO_PATH) { res.writeHead(404); res.end(); return; }
     const range = req.headers.range;
     const m = range && /^bytes=(\d*)-(\d*)$/.exec(range);
+    if (m && m[1] === "") {
+      // Mimic the real upstream: GitHub's raw CDN (Varnish) answers
+      // suffix ranges with 501 "Unsupported client range". The Worker
+      // must rewrite them to explicit ranges before forwarding — if it
+      // ever passes one through, this stub makes the test fail exactly
+      // as the live run would.
+      res.writeHead(501, { "Content-Type": "text/html" });
+      res.end("Unsupported client range");
+      return;
+    }
     if (m) {
       let start, end;
       if (m[1] === "") { start = VIDEO.length - Number(m[2]); end = VIDEO.length - 1; }
@@ -126,6 +136,15 @@ await run("demo: Range bytes=1000-1999 — 206 with the exact slice", async () =
   const buf = Buffer.from(await res.arrayBuffer());
   assert.equal(buf.length, 1000);
   assert.ok(buf.equals(VIDEO.subarray(1000, 2000)));
+});
+
+await run("demo: open-ended Range bytes=1000- — 206 to end of file", async () => {
+  const res = await get(DEMO_PATH, { Range: "bytes=1000-" });
+  assert.equal(res.status, 206);
+  assert.equal(res.headers.get("content-range"),
+    `bytes 1000-${VIDEO.length - 1}/${VIDEO.length}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  assert.ok(buf.equals(VIDEO.subarray(1000)));
 });
 
 await run("demo: suffix Range bytes=-100 — 206 with the last 100 bytes", async () => {
