@@ -131,17 +131,15 @@ function searchPeptides(args: any): any {
   const nq = norm(query);
   const screened = tokens.some((t) => NARRATIVE_TOKENS.has(t)) || tokens.length > 4;
   const matchOf = (p: any): string | null => {
-    const cands = [p.preferred_name, ...p.aliases].map(norm);
-    if (cands.includes(nq)) return nq === norm(p.preferred_name) ? "name" : "alias";
-    if (screened) return null;
-    const cq = compact(query);
-    for (const cand of cands) {
-      const ctoks = cand.split(" ");
-      if (tokens.length && tokens.every((t) => ctoks.includes(t))) return "alias";
-      const cc = compact(cand);
-      if (cq.length >= 3 && (cc.startsWith(cq) || cq.startsWith(cc))) return "alias";
-      if (tokens.length === 1 && tokens[0].length >= 3 &&
-          ctoks.some((t) => t.startsWith(tokens[0]))) return "alias";
+    // Exact reviewed-alias matching only (Instinct review fix, Nov 18):
+    // spaced or compacted spelling of a canonical name or reviewed alias;
+    // no prefix, substring or token-subset matching.
+    const names = [p.preferred_name, ...p.aliases];
+    if (names.map(norm).includes(nq)) {
+      return nq === norm(p.preferred_name) ? "name" : "alias";
+    }
+    if (names.map(compact).includes(compact(query))) {
+      return compact(query) === compact(p.preferred_name) ? "name" : "alias";
     }
     return null;
   };

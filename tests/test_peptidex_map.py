@@ -104,6 +104,43 @@ async def mcp_tests(S):
             assert d["status"] == "ok" and d["matches"][0]["peptide_id"] == pid, (q, d)
     await run("positive: spelling normalization (TB500, bpc157, GHKCu)", t_spelling)
 
+    async def t_suffix_rejection():
+        # Instinct review fix (Nov 18): name matching is exact-alias only.
+        # A reviewed name followed by anything else — a condition word, a
+        # trailing number, an email fragment — is NOT a match; it returns
+        # the standard unknown-name result and never echoes the input.
+        for q in ["BPC-157 pregnancy", "bpc-157@example.com", "BPC-157 500",
+                  "TB-500 arthritis", "GHK-Cu pregnancy", "MOTS-c arthritis",
+                  "TB-500 for wound healing", "bpc 157 500 mg"]:
+            d = await S.call("search_peptides", {"query": q})
+            assert d["status"] in ("not_found", "rejected"), (q, d["status"])
+            assert d.get("matches", []) == [], (q, d.get("matches"))
+            assert q.lower() not in json.dumps(d).lower(), (q, "input echoed")
+        d = await S.call("search_peptides", {"query": "BPC-157 pregnancy"})
+        assert d["status"] == "not_found" and "pregnancy" not in json.dumps(d)
+        d = await S.call("search_peptides", {"query": "TB-500 arthritis"})
+        assert d["status"] == "not_found" and "arthritis" not in json.dumps(d)
+    await run("refusal: name + arbitrary suffix is not a match (exact-alias only)",
+              t_suffix_rejection)
+
+    async def t_names_are_not_ids():
+        # Name resolution in card/compare is by catalog ID only; a display
+        # name or a name with extra words is rejected, without echo.
+        d = await S.call("get_peptide_card", {"peptide_id": "BPC-157"})
+        assert d["status"] == "rejected"
+        d = await S.call("get_peptide_card", {"peptide_id": "bpc_157 pregnancy"})
+        assert d["status"] == "rejected"
+        assert "pregnancy" not in json.dumps(d)
+        d = await S.call("compare_peptide_evidence",
+                         {"peptide_ids": ["BPC-157", "tb_500"]})
+        assert d["status"] == "rejected"
+        d = await S.call("compare_peptide_evidence",
+                         {"peptide_ids": ["bpc_157", "TB-500 arthritis"]})
+        assert d["status"] == "rejected"
+        assert "arthritis" not in json.dumps(d)
+    await run("refusal: card/compare take catalog IDs only, no name resolution",
+              t_names_are_not_ids)
+
     async def t_browse_systems():
         d = await S.call("browse_research_map", {"body_system": "musculoskeletal"})
         topics = {c["topic_id"] for c in d["connections"]}
@@ -472,6 +509,22 @@ def unit_tests():
                 assert s in data.SYSTEMS, s
     check("unit: referential integrity across peptides/claims/studies/records",
           t_integrity)
+
+    def t_bpc_safety_wording():
+        # Instinct review fix (Nov 18): the card's own study record
+        # (poolton_2026) includes a two-person pilot evaluating the
+        # safety of intravenous BPC-157, so an absolute "no clinical
+        # safety data" claim contradicts the record. The card must say
+        # the evidence is insufficient to establish safety.
+        p = data.PEPTIDES["bpc_157"]
+        for field in [p["safety_summary"], p["evidence_limitations"],
+                      p["evidence_stage"]["limits"]]:
+            assert "insufficient to establish safety" in field, field[:80]
+            assert "no clinical safety data" not in field.lower(), field[:80]
+        rec = data.STUDIES["poolton_2026"]["results_summary"]
+        assert "intravenous BPC-157" in rec and "two-person" in rec, rec[:120]
+    check("unit: BPC-157 safety wording matches its own study record",
+          t_bpc_safety_wording)
 
     def t_no_input_logging():
         for f in ["server.py", "peptidex_data.py"]:

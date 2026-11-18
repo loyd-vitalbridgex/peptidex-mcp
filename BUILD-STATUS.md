@@ -9,6 +9,21 @@ of spec 08 (§3 shapes, §7 disclaimer verbatim).
 **Build order followed** (Instinct, Nov 18): (1) seed cards, (2) the
 searchable map, (3) the deployment package.
 
+**v0.3 update (2026-11-18, Instinct review fixes):** (1) name lookup
+restricted to exact reviewed aliases — all prefix/substring/token-subset
+matching removed in every serving layer; (2) BPC-157 safety wording
+corrected to "insufficient to establish safety" (its own study record
+includes a two-person pilot evaluating intravenous BPC-157 safety);
+(3) **new Cloudflare Worker artifact** (`worker/dist/peptidex-mcp.js`)
+is now the deployable for the live endpoint — the live runtime is a
+plain Worker, not Deno — with the challenge route kept, typed input
+schemas, and its own artifact test suite; (4) full citation audit
+against primary sources: all 12 studies and 9 regulatory records
+verified, one dead source URL repaired (FDA 503A nominations list), the
+FDA TB-500 evaluation added as a cited source, two document dates and
+one misattribution corrected. Dataset version **2026-11-18.1**. Full
+detail: `../openai-plugin-specs/12-peptidex-map-v0.3-changes.md`.
+
 ## What was built
 
 | File | What it is |
@@ -16,9 +31,12 @@ searchable map, (3) the deployment package.
 | `data/library.json` | The one versioned, reviewed dataset (§3 record model). |
 | `peptidex_data.py` | Data + validation layer: all operations, server-side enforcement, staleness logic. No logging anywhere. |
 | `server.py` | Python MCP server (low-level MCP API), stdio + Streamable HTTP, `/health` + challenge routes. Production mirror. |
-| `edge-function/peptidex-mcp/index.ts` | Deno/Supabase edge-function source (TrueGift style), imports the same `library.json`. |
-| `edge-function/build.py` + `edge-function/dist/index.ts` | Generates the self-contained deployable (dataset inlined). |
+| `edge-function/peptidex-mcp/index.ts` | Deno/Supabase edge-function mirror (reference only), imports the same `library.json`. |
+| `edge-function/build.py` + `edge-function/dist/index.ts` | Generates the self-contained Deno variant (dataset inlined). |
+| `worker/peptidex-mcp.ts` | **Cloudflare Worker source** — the live runtime. Same data layer; typed input schemas; challenge token from the Worker env. |
+| `worker/build.mjs` + `worker/dist/peptidex-mcp.js` | Generates the self-contained Worker deployable (types stripped, dataset inlined, no imports). |
 | `tests/test_peptidex_map.py` | Acceptance suite: MCP integration + unit tests. |
+| `tests/test_worker.mjs` | Worker artifact suite: imports the dist module in Node and drives its fetch handler. |
 | `DEPLOY.md` | Deploy steps, rollback, source-of-truth/audit, clinical seam. |
 | `requirements.txt` | `mcp==1.30.0`, `uvicorn==0.54.0`. |
 
@@ -33,13 +51,14 @@ library operations served from the same dataset so nothing regresses:
 
 ## Dataset
 
-- **Version:** 2026-11-18 · **Card version:** 2026-11-17 · **Last review:**
-  2026-11-17 · **Regulatory records checked:** 2026-11-17, **next due
-  2026-11-24** (weekly cadence) · Peptide evidence review due 2026-12-17.
+- **Version:** 2026-11-18.1 · **Card version:** 2026-11-17 · **Last review:**
+  2026-11-18 (v0.3 citation audit) · **Regulatory records checked:**
+  2026-11-17, **next due 2026-11-24** (weekly cadence) · Peptide evidence
+  review due 2026-12-17.
 - **Contents:** 4 peptides (BPC-157, TB-500, GHK-Cu, MOTS-c — the v0.2
   seed set only), 12 study records, 13 claim records (evidence classified
   per claim), 9 regulatory records (US FDA, US HHS, WADA kept distinct),
-  6 regulator sources, 13 general explainers, 9 regulatory terms,
+  7 regulator sources, 13 general explainers, 9 regulatory terms,
   5 body systems, 7 research topics.
 - **TB-500 discipline:** the record distinguishes the seven-amino-acid
   fragment from full-length thymosin beta-4 throughout and states the
@@ -58,7 +77,15 @@ library operations served from the same dataset so nothing regresses:
 
 ## Test results (actual runs, 2026-11-18)
 
-- **Acceptance suite: 34/34 passed, 0 failed.**
+- **v0.3 (after the Instinct review fixes): Python acceptance suite
+  37/37 passed; Worker artifact suite 15/15 passed** (`node
+  worker/build.mjs && node tests/test_worker.mjs` — health, challenge
+  route set/unset, typed-schema tools/list, alias search, suffix
+  rejections, unknown-field rejection, exclusion, card/regulatory/
+  source behavior, all through the dist module's fetch handler).
+  Worker-vs-Python payload parity verified identical on browse (all +
+  evidence-filtered), card, compare, regulatory and source calls.
+- **Acceptance suite at v0.2 build: 34/34 passed, 0 failed.**
   `~/workspace/consumer-portfolio/mcp-prototypes/truegift/.venv/bin/python tests/test_peptidex_map.py`
   (any venv with `mcp==1.30.0` works). Coverage: tool surface +
   annotations; name/alias/spelling lookup; body-system and research-goal
@@ -124,7 +151,8 @@ built**.
 ## Open items
 
 1. **Instinct:** review this package, then deploy per `DEPLOY.md`
-   (function `peptidex-mcp`, read-back audit, live verification).
+   (Cloudflare Worker module `worker/dist/peptidex-mcp.js`, challenge
+   secret confirmed, live verification).
 2. **Regulatory recheck due 2026-11-24** — records must be rechecked
    against primary sources before any release after that date (the
    server withdraws stale conclusions automatically in the meantime).

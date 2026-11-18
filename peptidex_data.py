@@ -11,6 +11,9 @@ Rules enforced here (build spec v0.2 sections 3-5; spec 08 F5):
   - narrow, bounded inputs; unknown fields are REJECTED server-side;
   - name search is name-only: health narratives, personal questions,
     dosing / purchasing / instruction text are rejected without echo;
+  - name matching is exact-alias only: the query must equal a canonical
+    name or a reviewed alias after case/punctuation normalization (spaced
+    or compacted spelling); no prefix, substring or token-subset matching;
   - the excluded substance class is rejected as out of scope, and no
     member of it exists in the dataset;
   - a regulatory record past its review due date serves no current-status
@@ -187,22 +190,20 @@ def search_peptides(args):
     tokens = nq.split()
 
     def matches(peptide):
-        cands = [_norm(c) for c in _name_candidates(peptide)]
-        if nq in cands:
-            return "name" if nq == _norm(peptide["preferred_name"]) else "alias"
-        if any(t in _NARRATIVE_TOKENS for t in tokens) or len(tokens) > 4:
-            return None  # screened below, before any partial matching
-        cq = _compact(query)
-        for cand in cands:
-            ctoks = cand.split()
-            if tokens and all(t in ctoks for t in tokens):
-                return "alias"
-            cc = _compact(cand)
-            if len(cq) >= 3 and (cc.startswith(cq) or cq.startswith(cc)):
-                return "alias"
-            if len(tokens) == 1 and len(tokens[0]) >= 3 and \
-                    any(t.startswith(tokens[0]) for t in ctoks):
-                return "alias"
+        # Exact reviewed-alias matching only (Instinct review fix, Nov 18):
+        # the query must equal a canonical name or a reviewed alias after
+        # case/punctuation normalization, in spaced or compacted spelling
+        # ("TB-500" / "TB500"). No prefix, substring or token-subset
+        # matching: a name followed by anything else (a condition word, a
+        # number, an email fragment) is not a match and falls through to
+        # the unknown-name result or the name-only rejection below.
+        names = _name_candidates(peptide)
+        if nq in [_norm(c) for c in names]:
+            return "name" if nq == _norm(peptide["preferred_name"]) \
+                else "alias"
+        if _compact(query) in [_compact(c) for c in names]:
+            return "name" if _compact(query) == _compact(
+                peptide["preferred_name"]) else "alias"
         return None
 
     hits = [(p, m) for p in LIB["peptides"] if (m := matches(p))]
