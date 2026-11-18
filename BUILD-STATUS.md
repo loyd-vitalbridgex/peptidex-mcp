@@ -33,10 +33,13 @@ raw GitHub URL with Range passthrough, `Content-Type: video/mp4`,
 `Accept-Ranges: bytes` and a one-year immutable cache. Exact path
 only — other `/demo/*` paths 404. No tool, `/health`, challenge-route
 or dataset change (library stays **2026-11-18.1**). New suite
-`tests/test_demo_route.mjs`: 8/8 in local mode (upstream stubbed to a
-127.0.0.1 file server via the `DEMO_VIDEO_URL` env override) and 8/8
+`tests/test_demo_route.mjs`: 9/9 in local mode (upstream stubbed to a
+127.0.0.1 file server via the `DEMO_VIDEO_URL` env override) and 9/9
 in `--live` mode against the real raw URL; existing suites unchanged
-at Python 37/37 and Worker 15/15. Full detail:
+at Python 37/37 and Worker 15/15. One live-run find, fixed in the same
+release: GitHub's raw CDN rejects suffix ranges (`bytes=-N`) with 501,
+so the route rewrites them to explicit ranges (HEAD for the length
+first); the local stub now mimics that 501. Full detail:
 `../openai-plugin-specs/13-peptidex-map-v0.3.1-changes.md`.
 
 ## What was built

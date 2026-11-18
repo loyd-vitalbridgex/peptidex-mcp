@@ -106,7 +106,10 @@ Worker script, so it is committed in this repo at
 `demo/peptidex-walkthrough.mp4` and the route **streams it from the
 repo's raw GitHub URL**, passing `Range` / `If-Range` through and
 setting `Content-Type: video/mp4`, `Accept-Ranges: bytes` and
-`Cache-Control: public, max-age=31536000, immutable`. Exact path only;
+`Cache-Control: public, max-age=31536000, immutable`. (The raw CDN
+rejects suffix ranges with 501, so the route rewrites `bytes=-N` to
+the equivalent explicit range, resolving the length with a HEAD
+first.) Exact path only;
 every other `/demo/*` path returns 404. This is the Worker's only
 outbound fetch and its only non-MCP route; the nine tools, `/health`
 and the challenge route are unchanged, and the dataset version does not
